@@ -1,0 +1,144 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#070b1a">
+  <meta name="description" content="Manage the Bahay Catalog securely through the LavaLust API.">
+  <title>Bahay Catalog</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<div id="app" v-cloak>
+        <header class="topbar">
+            <div class="topbar-inner">
+                <a class="brand" href="/">
+                    <span class="eye-mark" aria-hidden="true">
+                        <svg viewBox="0 0 48 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M2 16C8 7.5 15.3 3 24 3s16 4.5 22 13c-6 8.5-13.3 13-22 13S8 24.5 2 16Z" stroke="#42D7E8" stroke-width="2.5"/>
+                            <circle cx="24" cy="16" r="8" stroke="#FFD45E" stroke-width="2.5"/>
+                            <circle cx="24" cy="16" r="3.5" fill="#42D7E8"/>
+                        </svg>
+                    </span>
+                    Bahay Catalog
+                </a>
+                <div v-if="user" class="toolbar">
+                    <span class="identity">{{ user.username }}</span>
+                    <button class="secondary" @click="logout">Log out</button>
+                </div>
+                <span v-else class="connection">LavaLust API</span>
+            </div>
+        </header>
+
+        <section v-if="!user" class="auth-wrap">
+            <div class="auth-card">
+                <p class="eyebrow">Product management</p>
+                <h1>{{ registering ? 'Create account' : 'Welcome back' }}</h1>
+                <p>{{ registering ? 'Register an account to manage products.' : 'Log in to view and manage your products.' }}</p>
+                <div v-if="error" class="notice">{{ error }}</div>
+                <div v-if="notice" class="notice success">{{ notice }}</div>
+                <form @submit.prevent="authenticate">
+                    <template v-if="registering">
+                        <label for="username">Username</label>
+                        <input id="username" v-model.trim="credentials.username" required maxlength="100" autocomplete="username">
+                        <label for="email">Email</label>
+                        <input id="email" v-model.trim="credentials.email" type="email" required maxlength="255" autocomplete="email">
+                    </template>
+                    <template v-else>
+                        <label for="identity">Username or email</label>
+                        <input id="identity" v-model.trim="credentials.identity" required autocomplete="username">
+                    </template>
+                    <label for="password">Password</label>
+                    <input id="password" v-model="credentials.password" type="password" minlength="8" required autocomplete="current-password">
+                    <button type="submit" :disabled="busy">{{ busy ? 'Please waitâ€¦' : (registering ? 'Create account' : 'Log in') }}</button>
+                </form>
+                <p class="auth-switch">
+                    {{ registering ? 'Already registered?' : 'Need an account?' }}
+                    <button @click="toggleRegistration">{{ registering ? 'Log in' : 'Register' }}</button>
+                </p>
+            </div>
+        </section>
+
+        <main v-else>
+            <div class="intro">
+                <div class="hero-eye" aria-hidden="true">
+                    <svg viewBox="0 0 180 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path class="eye-outline" d="M7 60C29 30 56 12 90 12s61 18 83 48c-22 30-49 48-83 48S29 90 7 60Z"/>
+                        <circle class="iris-ring" cx="90" cy="60" r="34"/>
+                        <circle class="iris" cx="90" cy="60" r="25"/>
+                        <circle class="pupil" cx="90" cy="60" r="12"/>
+                        <circle cx="96" cy="53" r="4" fill="#F4F7FF"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="eyebrow">Catalog</p>
+                    <h1>Our products</h1>
+                    <p class="subtitle">Manage product records through the authenticated LavaLust API.</p>
+                </div>
+                <div class="toolbar">
+                    <div class="count">{{ products.length }} products</div>
+                    <button @click="openCreate">Add product</button>
+                </div>
+            </div>
+
+            <div v-if="error" class="notice">{{ error }}</div>
+            <div v-if="notice" class="notice success">{{ notice }}</div>
+
+            <form v-if="formOpen" class="form-card" @submit.prevent="saveProduct">
+                <h2>{{ editingId ? 'Edit product' : 'Add product' }}</h2>
+                <p>Save changes using the authenticated API.</p>
+                <div class="form-grid">
+                    <div>
+                        <label for="product-name">Product name</label>
+                        <input id="product-name" v-model.trim="draft.product_name" maxlength="100" required>
+                    </div>
+                    <div>
+                        <label for="product-price">Price</label>
+                        <input id="product-price" v-model="draft.price" type="number" min="0" max="99999999.99" step="0.01" required>
+                    </div>
+                    <div>
+                        <label for="product-quantity">Quantity</label>
+                        <input id="product-quantity" v-model="draft.quantity" type="number" min="0" step="1" required>
+                    </div>
+                    <div>
+                        <label for="product-description">Description</label>
+                        <textarea id="product-description" v-model.trim="draft.description" maxlength="10000"></textarea>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" :disabled="busy">{{ busy ? 'Savingâ€¦' : 'Save product' }}</button>
+                    <button type="button" class="secondary" @click="closeForm">Cancel</button>
+                </div>
+            </form>
+
+            <div v-if="loading" class="empty-state">Loading products from the APIâ€¦</div>
+            <div v-else-if="!products.length" class="empty-state">There are no products in the catalog yet.</div>
+            <div v-else class="product-grid">
+                <article v-for="product in products" :key="product.id" class="product-card">
+                    <div class="product-visual" aria-hidden="true"><span>{{ (product.product_name || 'P').slice(0, 1).toUpperCase() }}</span></div>
+                    <div class="product-body">
+                        <h2>{{ product.product_name }}</h2>
+                        <p class="description">{{ product.description || 'No description provided.' }}</p>
+                        <div class="product-details">
+                            <div>
+                                <span class="detail-label">Price</span>
+                                <span class="price">{{ Number(product.price).toFixed(2) }}</span>
+                            </div>
+                            <div class="quantity">
+                                <span class="detail-label">In stock</span>
+                                {{ product.quantity }}
+                            </div>
+                        </div>
+                        <div class="actions" style="margin-top: 16px">
+                            <button class="secondary" @click="openEdit(product)">Edit</button>
+                            <button class="danger" :disabled="busy" @click="deleteProduct(product)">Delete</button>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </main>
+    </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
